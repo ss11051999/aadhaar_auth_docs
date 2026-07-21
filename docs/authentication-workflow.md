@@ -8,52 +8,69 @@ sidebar_position: 2
 
 The Aadhaar Authentication workflow is a secure process used to verify a resident's identity using their **Aadhaar Number (UID)** or **Virtual ID (VID)** and one or more authentication factors.
 
-Regardless of the authentication method (OTP, Biometric, Demographic, Face, eKYC, or Multi-Factor), the overall workflow remains largely the same. The primary difference lies in the type of authentication data collected during the process.
+In the **Sub-AUA integration model**, the Sub-AUA does not directly communicate with the Aadhaar Authentication Server. The **AUA (Authentication User Agency)** acts as the authorized integration layer between the Sub-AUA and the Aadhaar Authentication ecosystem.
 
-This guide provides a high-level overview of the complete authentication lifecycle.
+The Sub-AUA prepares the required authentication request and submits it to the AUA. The AUA processes or forwards the request according to the applicable integration flow and returns the Authentication Response to the Sub-AUA.
+
+Regardless of the authentication method (OTP, Biometric, Demographic, Face, eKYC, or Multi-Factor), the overall workflow remains largely the same. The primary difference lies in the type of authentication data collected and processed during the request.
+
+This guide provides a high-level overview of the complete authentication lifecycle from a **Sub-AUA perspective**.
 
 ---
 
-# Authentication Workflow
+## Authentication Workflow
 
-```text id="workflow1"
-                    Start
-                      │
-                      ▼
-        Collect Required Inputs
-                      │
-                      ▼
-     Generate Authentication Data
-        (OTP / PID XML / Demo Data)
-                      │
-                      ▼
-       Encrypt Sensitive Information
-                      │
-                      ▼
-             Generate HMAC
-                      │
-                      ▼
-   Create Authentication Request XML
-                      │
-                      ▼
-      Digitally Sign Request XML
-                      │
-                      ▼
-    Send Request to Authentication Server
-                      │
-                      ▼
- Receive Authentication Response XML
-                      │
-                      ▼
-    Process Authentication Result
-                      │
-                      ▼
-                     End
+```text
+                         Start
+                           │
+                           ▼
+                Collect Required Inputs
+                           │
+                           ▼
+             Generate Authentication Data
+                (OTP / PID XML / Demo Data)
+                           │
+                           ▼
+              Encrypt Sensitive Information
+                           │
+                           ▼
+                     Generate HMAC
+                           │
+                           ▼
+           Create Authentication Request XML
+                           │
+                           ▼
+              Digitally Sign Request XML
+                           │
+                           ▼
+            Send Request to AUA
+                           │
+                           ▼
+                  AUA Processes Request
+                           │
+                           ▼
+        AUA Sends Request to Authentication
+                 Ecosystem / Server
+                           │
+                           ▼
+          Authentication Response Generated
+                           │
+                           ▼
+                Response Received by AUA
+                           │
+                           ▼
+            AUA Returns Response to Sub-AUA
+                           │
+                           ▼
+          Sub-AUA Processes Authentication Result
+                           │
+                           ▼
+                          End
 ```
 
 ---
 
-# Step 1 – Collect Required Inputs
+## Step 1 – Collect Required Inputs
 
 The authentication process begins by collecting all required information.
 
@@ -67,59 +84,71 @@ Depending on the authentication type, the required inputs may include:
 * Demographic information
 * Transaction ID
 * Timestamp
-* License Key
+* License or integration credentials
 * Authentication credentials
+* Other information required by the selected authentication method and AUA
 
-At the end of this step, your application has all the information required to begin authentication.
+The Sub-AUA should collect the required information in accordance with the applicable authentication requirements and the integration specifications provided by the AUA.
+
+At the end of this step, the Sub-AUA has the information required to prepare the authentication request.
 
 ---
 
-# Step 2 – Generate Authentication Data
+## Step 2 – Generate Authentication Data
 
 Generate the authentication data based on the selected authentication method.
 
 Examples:
 
-| Authentication Method | Authentication Data                                |
-| --------------------- | -------------------------------------------------- |
-| OTP                   | OTP XML / PID XML containing OTP                   |
+| Authentication Method | Authentication Data |
+| --------------------- | ------------------- |
+| OTP                   | OTP-related authentication data / PID XML |
 | Biometric             | PID XML containing fingerprint, iris, or face data |
-| Demographic           | Resident demographic information                   |
-| Face                  | Face biometric data                                |
-| eKYC                  | Authentication data with resident consent          |
-| Multi-Factor          | Combination of multiple authentication factors     |
+| Demographic           | Resident demographic information |
+| Face                  | Face biometric authentication data |
+| eKYC                  | Authentication data with applicable resident consent |
+| Multi-Factor          | Combination of multiple authentication factors |
+
+The exact data and XML structure depend on the selected authentication method and the applicable integration specifications.
 
 This authentication data becomes the input for the next step.
 
 ---
 
-# Step 3 – Encrypt Sensitive Information
+## Step 3 – Encrypt Sensitive Information
 
-Sensitive authentication information must be encrypted before transmission.
+Sensitive authentication information must be protected before transmission.
 
-Typically, this includes:
+Depending on the authentication method and applicable specifications, this may include:
 
 * PID XML
 * Authentication data
 * Session Key
+* Other sensitive authentication information
 
-Encryption protects resident information while it travels over the network.
+Encryption protects sensitive resident information during transmission and ensures that protected authentication data can only be processed by authorized components.
 
----
-
-# Step 4 – Generate HMAC
-
-Generate an HMAC (Hash-based Message Authentication Code) using the authentication data.
-
-The HMAC allows the Authentication Server to verify that the authentication data has not been modified after it was created.
-
-This ensures data integrity.
+The Sub-AUA should follow the encryption mechanism and key management requirements specified for the applicable integration.
 
 ---
 
-# Step 5 – Create Authentication Request XML
+## Step 4 – Generate HMAC
 
-Create the Authentication Request XML by combining:
+Generate an HMAC (Hash-based Message Authentication Code) using the authentication data where required.
+
+The HMAC allows the receiving authentication infrastructure to verify the integrity of the protected authentication data and detect unauthorized modification.
+
+This helps ensure that the authentication data has not been altered during processing or transmission.
+
+The exact HMAC generation mechanism should follow the applicable authentication specifications.
+
+---
+
+## Step 5 – Create Authentication Request XML
+
+Create the Authentication Request XML using the required authentication information.
+
+Depending on the authentication method, the request may contain:
 
 * Authentication details
 * Authentication type
@@ -127,90 +156,203 @@ Create the Authentication Request XML by combining:
 * Encrypted Session Key
 * Encrypted authentication data
 * HMAC
+* Transaction ID
+* Timestamp
+* Other required request attributes
 
-This XML represents the complete authentication request.
+The Authentication Request XML represents the complete authentication request prepared by the Sub-AUA.
+
+The exact request structure depends on the authentication method and the interface defined by the AUA.
 
 ---
 
-# Step 6 – Digitally Sign the XML
+## Step 6 – Digitally Sign the XML
 
-Digitally sign the Authentication Request XML using your organization's signing certificate.
+Digitally sign the Authentication Request XML using the applicable signing certificate and mechanism required by the integration.
 
 The digital signature provides:
 
-* Authentication
-* Integrity
-* Non-repudiation
+* Authentication of the sender
+* Data integrity
+* Assurance that the request has not been modified after signing
+* Non-repudiation where applicable
 
-Any modification made after signing invalidates the signature.
+Any modification to the signed content after signing may cause signature verification to fail.
 
----
-
-# Step 7 – Send Authentication Request
-
-Send the signed Authentication Request XML to the Aadhaar Authentication Server using a secure HTTPS POST request.
-
-The Authentication Server then:
-
-* Validates the request
-* Verifies the digital signature
-* Decrypts the authentication data
-* Performs authentication
-* Generates the Authentication Response
+The exact certificate, signing process, and responsibility for signing should follow the integration requirements defined by the AUA.
 
 ---
 
-# Step 8 – Receive Authentication Response
+## Step 7 – Send Authentication Request to AUA
 
-The Authentication Server returns an Authentication Response XML.
+The Sub-AUA sends the prepared Authentication Request to the **AUA** using the interface and secure communication mechanism provided by the AUA.
 
-The response contains information such as:
+The high-level flow is:
+
+```text
+Sub-AUA
+    │
+    │ Authentication Request
+    ▼
+AUA
+    │
+    │ Process / Forward Request
+    ▼
+Aadhaar Authentication Ecosystem
+```
+
+The AUA acts as the integration layer between the Sub-AUA and the Aadhaar Authentication ecosystem.
+
+The AUA may perform applicable validations and processing before forwarding or submitting the request to the appropriate authentication infrastructure.
+
+The exact request endpoint, authentication mechanism, request format, and transport requirements are provided by the associated AUA.
+
+---
+
+## Step 8 – AUA Processes the Authentication Request
+
+After receiving the request from the Sub-AUA, the AUA processes the request according to the applicable integration requirements.
+
+The high-level processing flow may include:
+
+* Receiving the request from the Sub-AUA.
+* Validating the request.
+* Performing applicable authentication and security checks.
+* Forwarding or submitting the authentication request to the appropriate authentication infrastructure.
+* Receiving the Authentication Response.
+* Returning the relevant response to the Sub-AUA.
+
+The exact internal processing performed by the AUA may vary depending on the AUA's architecture and integration model.
+
+---
+
+## Step 9 – Receive Authentication Response from AUA
+
+After the authentication request has been processed, the Authentication Response is returned through the AUA.
+
+The response flow is:
+
+```text
+Aadhaar Authentication Ecosystem
+              │
+              │ Authentication Response
+              ▼
+             AUA
+              │
+              │ Authentication Response
+              ▼
+          Sub-AUA
+```
+
+The response may contain information such as:
 
 * Authentication result
 * Transaction ID
 * Timestamp
-* Error Code (if authentication fails)
+* Response code
+* Error code, if authentication fails
+* Additional response information, if applicable
 
-Your application should validate and parse the response before continuing.
+The Sub-AUA should validate and parse the response before continuing the business workflow.
 
 ---
 
-# Step 9 – Process the Result
+## Step 10 – Process the Authentication Result
 
-Finally, process the authentication result.
+Finally, the Sub-AUA processes the authentication result received from the AUA.
 
 If authentication succeeds:
 
 * Continue the business workflow.
-* Grant access to the requested service.
+* Grant access to the requested service, where applicable.
 * Record the successful transaction.
+* Store only the minimum information required for audit and reconciliation.
 
 If authentication fails:
 
 * Read the returned error code.
-* Display an appropriate message.
+* Display an appropriate user-friendly message.
 * Allow the resident to retry if applicable.
-* Record the failure for troubleshooting and auditing.
+* Record the transaction details required for troubleshooting and auditing.
+* Refer to the Error Codes section for additional information.
+
+The Sub-AUA should not assume that the authentication was successful based solely on the HTTP response status. The actual authentication result must be determined from the Authentication Response.
 
 ---
 
-# Workflow Summary
+## Complete Request and Response Flow
 
-| Step | Description                       |
-| ---- | --------------------------------- |
-| 1    | Collect Required Inputs           |
-| 2    | Generate Authentication Data      |
-| 3    | Encrypt Sensitive Information     |
-| 4    | Generate HMAC                     |
-| 5    | Create Authentication Request XML |
-| 6    | Digitally Sign XML                |
-| 7    | Send Authentication Request       |
-| 8    | Receive Authentication Response   |
-| 9    | Process Authentication Result     |
+The complete Sub-AUA authentication flow can be represented as follows:
+
+```text
+┌─────────────────────┐
+│   Sub-AUA System    │
+└──────────┬──────────┘
+           │
+           │ 1. Collect Inputs
+           ▼
+┌─────────────────────┐
+│ Generate Auth Data  │
+└──────────┬──────────┘
+           │
+           │ 2. Encrypt / HMAC
+           ▼
+┌─────────────────────┐
+│ Create Auth Request │
+└──────────┬──────────┘
+           │
+           │ 3. Sign Request
+           ▼
+┌─────────────────────┐
+│         AUA         │
+└──────────┬──────────┘
+           │
+           │ 4. Process / Forward
+           ▼
+┌─────────────────────────────────┐
+│ Aadhaar Authentication          │
+│ Ecosystem                       │
+└──────────┬──────────────────────┘
+           │
+           │ 5. Authentication Response
+           ▼
+┌─────────────────────┐
+│         AUA         │
+└──────────┬──────────┘
+           │
+           │ 6. Return Response
+           ▼
+┌─────────────────────┐
+│   Sub-AUA System    │
+└──────────┬──────────┘
+           │
+           │ 7. Validate Response
+           ▼
+┌─────────────────────┐
+│ Process Result      │
+└─────────────────────┘
+```
 
 ---
 
-# Authentication Methods Covered
+## Workflow Summary
+
+| Step | Description |
+| ---- | ----------- |
+| 1 | Collect Required Inputs |
+| 2 | Generate Authentication Data |
+| 3 | Encrypt Sensitive Information |
+| 4 | Generate HMAC |
+| 5 | Create Authentication Request XML |
+| 6 | Digitally Sign XML |
+| 7 | Send Authentication Request to AUA |
+| 8 | AUA Processes / Forwards Authentication Request |
+| 9 | Receive Authentication Response from AUA |
+| 10 | Process Authentication Result |
+
+---
+
+## Authentication Methods Covered
 
 The workflow described in this guide applies to the following authentication methods:
 
@@ -221,28 +363,35 @@ The workflow described in this guide applies to the following authentication met
 * eKYC Authentication
 * Multi-Factor Authentication
 
-Although the authentication factor changes, the overall request lifecycle remains consistent.
+Although the authentication factor changes, the overall request and response lifecycle remains consistent.
+
+The main difference is the type of authentication data generated and the specific request structure required for each authentication method.
 
 ---
 
-# Best Practices
+## Best Practices
 
-When implementing the Aadhaar Authentication workflow:
+When implementing the Aadhaar Authentication workflow as a Sub-AUA:
 
-* Generate a new Session Key for every request.
-* Encrypt all sensitive authentication data before transmission.
-* Digitally sign every Authentication Request XML.
-* Use HTTPS for all communication.
-* Validate every Authentication Response XML.
-* Use a unique Transaction ID for each request.
-* Do not store OTPs, biometric data, or PID XML.
-* Log only non-sensitive information required for monitoring and auditing.
+* Follow the integration specifications provided by the associated AUA.
+* Generate a new Session Key for every request where applicable.
+* Encrypt sensitive authentication data before transmission.
+* Digitally sign the Authentication Request XML where required.
+* Use HTTPS for all communication between the Sub-AUA and AUA.
+* Validate every Authentication Response received from the AUA.
+* Match the response Transaction ID with the original request.
+* Do not rely solely on the HTTP status code to determine authentication success.
+* Evaluate the actual authentication result returned in the response.
+* Do not store OTPs, biometric data, or raw PID XML.
+* Do not log Session Keys, HMAC values, or other sensitive authentication information.
+* Log only non-sensitive information required for monitoring, auditing, and troubleshooting.
+* Maintain appropriate transaction correlation between the Sub-AUA request and the received response.
 
 ---
 
-# Next Steps
+## Next Steps
 
-Now that you understand the overall authentication workflow, you can explore the individual authentication guides for detailed implementation steps:
+Now that you understand the overall authentication workflow and the role of the **Sub-AUA and AUA**, you can explore the individual authentication guides for detailed implementation steps:
 
 * OTP Authentication
 * Biometric Authentication
@@ -251,4 +400,6 @@ Now that you understand the overall authentication workflow, you can explore the
 * eKYC Authentication
 * Multi-Factor Authentication
 
-Each guide explains the required inputs, XML structures, encryption process, request generation, and response handling specific to that authentication method.
+Each guide explains the required inputs, XML structures, encryption process, request generation, communication with the AUA, and Authentication Response handling specific to that authentication method.
+
+> **Important:** The exact API endpoints, request formats, response formats, authentication mechanisms, certificates, credentials, and operational procedures depend on the associated AUA and the applicable integration specifications. Always follow the current technical documentation and requirements provided by the AUA.
