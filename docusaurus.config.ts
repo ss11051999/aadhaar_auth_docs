@@ -218,7 +218,6 @@ const config: Config = {
       links: [
         {
           title: 'Docs',
-
           items: [
             {
               label: 'Introduction',
