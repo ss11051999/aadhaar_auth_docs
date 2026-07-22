@@ -44,7 +44,7 @@ If:
 
 ---
 
-# Authentication Error Codes
+## Authentication Error Codes
 
 | S. No. | Code    | Description                                | Recommended Action                                       |
 | ------ | ------- | ------------------------------------------ | -------------------------------------------------------- |
@@ -145,7 +145,7 @@ If:
  
 ---
 
-# Additional Authentication Error Codes
+## Additional Authentication Error Codes
 
 The following error codes are also applicable to Aadhaar authentication and related services.
 

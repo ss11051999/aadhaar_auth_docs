@@ -6,427 +6,134 @@ sidebar_position: 7
 
 ## Goal
 
-After generating and digitally signing the Authentication Request XML, the final request must be sent securely to the **AUA Server** over an HTTPS connection.
+Transmit the digitally signed Authentication Request XML from the **Sub-AUA** to the **AUA Server** over a secure HTTPS connection. The AUA then handles validation and forwards the request to the UIDAI Authentication Server.
 
-In the Sub-AUA architecture, the Sub-AUA does not directly send the Authentication Request to the UIDAI Authentication Server.
+---
 
-The Sub-AUA sends the request to the AUA using the integration API provided by the AUA. The AUA then processes the request and handles communication with the UIDAI authentication infrastructure.
-
-The request flow is:
+## Request Architecture & Flow
 
 ```text
-Sub-AUA
-    │
-    │ HTTPS POST
-    │ client_id
-    │ req_hash
-    │ req_data
-    ▼
-AUA Server
-    │
-    │ Process / Validate Request
-    ▼
-UIDAI Authentication Infrastructure
-    │
-    ▼
-Authentication Response
-    │
-    ▼
-AUA Server
-    │
-    ▼
-Sub-AUA
+Sub-AUA (Client) ──[HTTPS POST]──► AUA Server ──► ASA ──► UIDAI Server
 ```
-
----
-
-## Prerequisites
-
-Before sending the request, ensure that:
-
-* The Authentication Request XML has been generated successfully.
-* The XML has been digitally signed.
-* The request contains the encrypted PID block (`Data`).
-* The encrypted session key (`Skey`) has been included.
-* The HMAC has been generated and included.
-* The `client_id` provided by the AUA is valid.
-* The request hash (`req_hash`) has been generated correctly.
-* The `req_hash` corresponds to the request data being sent in `req_data`.
-* The AUA endpoint is correctly configured.
-* HTTPS is being used for communication.
-
----
-
-## Request Workflow
 
 ```text
-Generate Authentication Request XML
-                │
-                ▼
-Digitally Sign XML
-                │
-                ▼
-Generate Request Hash
-                │
-                ▼
-Create Sub-AUA Request
-                │
-                ├── client_id
-                ├── req_hash
-                └── req_data
-                │
-                ▼
-Create HTTPS POST Request
-                │
-                ▼
-Send Request to AUA
-                │
-                ▼
-AUA Server
-                │
-                ▼
-AUA Processes Request
-                │
-                ▼
-AUA Handles UIDAI Communication
-                │
-                ▼
-Receive Authentication Response
-                │
-                ▼
-Return Response to Sub-AUA
+┌─────────────────────────────────────────┐
+│       1. Signed Auth Request XML        │
+└────────────────────┬────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────┐
+│     2. Generate Hash (req_hash)         │
+└────────────────────┬────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────┐
+│  3. Wrap Payload into Sub-AUA Request   │
+│   - client_id                           │
+│   - req_hash                            │
+│   - req_data (Signed Auth XML)          │
+└────────────────────┬────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────┐
+│   4. Send HTTPS POST to AUA Server      │
+└─────────────────────────────────────────┘
 ```
 
 ---
 
-## HTTP Method
+## Request Structure
 
-The Sub-AUA sends the request to the AUA using the HTTP `POST` method.
+The Sub-AUA wraps its signed request payload into the outer XML structure required by the AUA's integration API.
 
-```http
-POST
-```
+### HTTP Details
+- **Method:** `POST`
+- **Headers:** 
+  ```http
+  Content-Type: application/xml
+  Accept: application/xml
+  ```
 
----
-
-## Request URL
-
-Send the request to the Authentication endpoint provided by the AUA.
-
-Example:
-
-```text
-https://aua.example.com/api/authentication
-```
-
-> Replace the example URL with the actual endpoint provided by your AUA.
-
----
-
-## HTTP Headers
-
-Typical request headers:
-
-```http
-Content-Type: application/xml
-Accept: application/xml
-```
-
-Additional headers may be required depending on your AUA integration.
-
----
-
-## Request Body
-
-The Sub-AUA request is wrapped inside an `<xml>` root element.
-
-The request contains the following fields:
-
-| Field | Description |
-|---|---|
-| `client_id` | Identifier provided by the AUA for the Sub-AUA/client |
-| `req_hash` | Hash generated for the request data |
-| `req_data` | Digitally signed Authentication Request XML |
-
-Example:
+### Request Payload Example
 
 ```xml
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <xml>
     <client_id>AUA-CHP</client_id>
-
-    <req_hash>
-        BASE64_ENCODED_REQUEST_HASH
-    </req_hash>
-
-    <req_data>
-        Signed Authentication Request XML
-    </req_data>
-</xml>
-```
-
-The `req_data` field contains the Authentication Request XML generated and digitally signed by the Sub-AUA.
-
-> The exact format and encoding of `req_data` should follow the API contract provided by the AUA.
-
----
-
-## Example OTP Authentication Request
-
-For OTP-based authentication, the `req_data` contains the digitally signed Authentication Request XML with the OTP authentication method enabled.
-
-Example:
-
-```xml
-<?xml version='1.0' encoding='utf-8'?>
-<xml>
-    <client_id>AUA-CHP</client_id>
-
-    <req_hash>
-        BASE64_ENCODED_REQUEST_HASH
-    </req_hash>
-
+    <req_hash>BASE64_ENCODED_REQUEST_HASH</req_hash>
     <req_data>
         <![CDATA[
-            <?xml version="1.0" encoding="UTF-8"?>
-            <Auth>
-                ...
-                <Uses otp="y"/>
-
-                <Skey ci="20260701">
-                    EncryptedSessionKey
-                </Skey>
-
-                <Data type="X">
-                    EncryptedPIDBlock
-                </Data>
-
-                <Hmac>
-                    GeneratedHmacValue
-                </Hmac>
-
-                <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">
-                    ...
-                </Signature>
-            </Auth>
+        <Auth>
+            <Uses otp="y"/>
+            <Device .../>
+            <Skey ci="20260701">EncryptedSessionKey</Skey>
+            <Data type="X">EncryptedPIDBlock</Data>
+            <Hmac>GeneratedHmacValue</Hmac>
+            <Signature xmlns="http://www.w3.org/2000/09/xmldsig#">...</Signature>
+        </Auth>
         ]]>
     </req_data>
 </xml>
 ```
 
-> The above example is for documentation purposes. The actual `req_data` format should be implemented according to the API specification provided by the AUA.
+**OR**
 
----
-
-## What Happens on the AUA Server?
-
-After receiving the request, the AUA server performs the required validation and processing.
-
-The AUA may:
-
-1. Validate the `client_id`.
-2. Validate the Sub-AUA credentials.
-3. Verify the `req_hash`.
-4. Validate the `req_data`.
-5. Validate the Authentication Request XML.
-6. Verify the digital signature.
-7. Validate the encrypted authentication data.
-8. Validate the OTP authentication request.
-9. Forward the appropriate authentication request to the UIDAI authentication infrastructure.
-10. Receive the Authentication Response.
-11. Return the Authentication Response to the Sub-AUA.
-
----
-
-## Request Flow Between Sub-AUA, AUA and UIDAI
-
-There are two separate communication layers.
-
-### Request 1 - Sub-AUA to AUA
-
-```text
-Sub-AUA
-    │
-    │ HTTPS POST
-    │
-    │ client_id
-    │ req_hash
-    │ req_data
-    ▼
-AUA Server
+```xml
+<?xml version='1.0' encoding='utf-8'?>
+<xml>
+	<client_id>AUA-CHP</client_id>
+	<req_hash>vl4JvOwp37CYRB9Ur88jO1MZs6l7+fadGOjskasEWgSl1rlF4TNW3FbwqNJdW3hxm1fTtc9i0kwcO0egeiTJ8MKhpY8sjh9CURTGSzgTmRk=</req_hash>
+	<req_data>PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4NCjxBdXRoIHVpZD0iMjA2MTA2NjU2MjIzIiByYz0iWSIgdGlkPSJyZWdpc3RlcmVkIiBhYz0iU1RHQ0hJUFMwMSIgc2E9IlNUR0NISVBTMDEiIHZlcj0iMi41IiB0eG49IjI0MDUwMjExNDIzNDAxNjk4MTg1OTEyOTBwbWciIGxrPSJOQSI+PFVzZXMgcGk9Im4iIHBhPSJuIiBwZmE9Im4iIGJpbz0ieSIgYnQ9IkZNUixGSVIiIHBpbj0ibiIgb3RwPSJuIiAvPjxNZXRhIHJkc0lkPSJBQ1BMLldJTi4wMDEiIHJkc1Zlcj0iMS4wLjQiIGRwSWQ9IlNUQVJURUsuQUNQTCIgZGM9IjQ5MGRlY2MzLWZiNjYtNGFmZS1hZmY1LTA4NjEyOTVmMDhhMCIgbWk9IkZNMjIwVSIgbWM9Ik1JSURmekNDQW1lZ0F3SUJBZ0lFQTRDc0JqQU5CZ2txaGtpRzl3MEJBUXNGQURCME1SMHdHd1lEVlFRREV4UkNTVXBCV1NCQlRVRlNUa0ZVU0NCVFNVNUlRVEVRTUE0R0ExVUVDQk1IUjFWS1FWSkJWREVSTUE4R0ExVUVDeE1JUkVsU1JVTlVUMUl4SVRBZkJnTlZCQW9UR0VGRFEwVlRVeUJEVDAxUVZWUkZRMGdnVUZaVUlFeFVSREVMTUFrR0ExVUVCaE1DU1U0d0hoY05NalF3TlRBeU1EVTFPVFV6V2hjTk1qUXdOakF4TURVMU9UVXpXakJSTVFzd0NRWURWUVFHRXdKSlRqRVFNQTRHQTFVRUNBd0hSM1ZxWVhKaGRERU5NQXNHQTFVRUNnd0VWVk5GVWpFTk1Bc0dBMVVFQ3d3RVZWTkZVakVTTUJBR0ExVUVBd3dKVUZKUFJGOVZVMFZTTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQ0FRRUE1cUNYSkV1ZVR0dzZjYjE4UW1rOEhSc1lHcUFSL2ZxbFYrYTlzaFhNbStUK2RyTGNPaGEzbnZrTklDNnBPRUFhRHo3VFdkNU40QUxxMTJ2a1RON3U2dUF4RTdGdDkvSGFOMzlRalBzaVVEMSs2WnQvWksyNVV3bS9XajN3RVNSaUl3QXNRaXBFU2J0MDREa3h6a1cvYzJqRFpEcXhqUmgxcDA1WUg0OHZrVnQ1VURCcnRHU2xrSUxwT1B5NWhrajFTbzhaVHN0NFlqYjJ6Qjd2OS9CWGNUNmZuVTN3SGVnek9qWmloZXRhMkVuVkFSWFlSTnBBZHNmVmdZSlJlQk42ZDZCUExodkdWQXJuZ1hYUlBOTTFwSjJuRkRGblA1ZitXak5CVzFMZzdHdzZCWllMTHlKVHdaRnVkZGdab3lyblNMWmFOcXVqaXZ0U0owSlFSMUNFclFJREFRQUJvend3T2pBTUJnTlZIUk1FQlRBREFRSC9NQXNHQTFVZER3UUVBd0lCaGpBZEJnTlZIUTRFRmdRVUE0bXdVYlZlNHJtNU5MVnI3ZzZnY1B5dUsyTXdEUVlKS29aSWh2Y05BUUVMQlFBRGdnRUJBQndZeTNDbGsxWXB6dW1uU2h3Sy82OGpPS1UvRFdKN2NBb0V4dVQ0aXVQM3JuNFl2NEZEengva2lLVnFIOVNFMnJ1dkdtcUZXN205TjBUL3lWOEpibG51ZEloeGJjTnhzSG9XUFBZeFJYOE8yZ1FRU1hraDRhSXBZemgxQWw3bkhVNGhVaCtnQnBCSG1MWWkrcFR4N2ZhcVhEYjg3RFhwalAzMG1YOTc2enQxSUhPOFZVckd2eUY4TXdKRU9HM0pOSnNwOXNpQ2VHVVpCNUtYakFJamo0cUs2NzljbmtqVjVEWkpPbjZzV1FLREwvbmoyMmVtS0dPTDNVOVJyaXlIZUdQUFBmNlhqUTRQKzlMaGFKYzFGZ2x3NlhWKzhPQ0VpREEwNm5tZm1TdkhmSXRpUWxIdlpmTWhVcXlyUlc5SkpFM3NtVHpWb2F1VVZYeTBLNkxkRmhVPSIgLz48U2tleSBjaT0iMjAyNTA5MjkiPko5TFhwT1p3NGlUeE5rRUVaeC9KcXRxaVdrKzVsdjJIdVRrTWFsS3IvMWozRy9Ma1ZKSFY3MFJaLzFWcitMNmcxVjUrYmtpdytvVnlUdnR0WUpxY0lqOG9MRVFvczBCaXZ6NG1vWHJGODBuazVlTkRvQ2FnUmlydk9tcnhYWHBBZS9wbTRMQ1hCM0EweUJFMUtzaURHTkVyd0ZSbkNURlRRdFNjRVlWdisrYjBMd0pBRVpmNm9HQnI3QWtkV2tRRTZuZE9LeWh2ZEtQbmlBMWxkVm5WY1JIZVdMV0lKb2Q5R1huME1TNGZPRWNXK0NQemdLcS9GdExRa3dQNnBCVjRRUmhyWXd5QVRDbHQ5Z1hxbVh3YmFVQThPVzE2UjlnZkNYU21nSDB4UDg0K1ZvT1Rza1FhdVl4eitGSTFGb290TUQrMU9IZXFnQ3F3a2dZcWV4bnVnZz09PC9Ta2V5PjxIbWFjPkJyOVNxSURUVVhvV3ExWHd6RWNEMEx4YXlMSUhsTW9xcmIrVUc0ZThmSzFadHZWVXdoN2FpeDBpS1kyWVo0TXk8L0htYWM+PERhdGEgdHlwZT0iWCI+TWpBeU5DMHdOUzB3TWxReE1UbzBNam96TXBUWCttVEp1YTVxcTJDVzkycHJleUVzSDNIdm1MMXFHWkYxUXhzUDBoeEFoNVB0cUtmc3RKN3p5ckpPdHFsOEhuUUFHT2hmV0tKcG5JR1RCWnA4MnNlZjBmSHVrZ3I3azJUSjYvS3ErU1J2ZWNaTDJFdG5NRWxBbTRJME1hVVJvRE1JNmtsSXE2MFh5UjBBTW5kaGF6Z0h6WVRUUittUWJ2L0EzYTg1UEZhTG5jRTZ0eExKZmNGMFkxeWN1WDJZMWVrTmQ3Q0U0UE41Si91eHhrZk51MkZDMElObDJwREJWbloyd0MxTklRQitucVJGT3BQdzRnTVY1ZjhyZ2ZIV1YrZmIvb2VLNkwrQkN0S29vcjFYa3ZIUzFyMG04ZGVneUhSVGdvRjR2S2pnc2U2OTJjelZUUStLSFZnYXJ2WkdPZy9lNkJXcUtLQlEySmtXNGpwYzdvTE9HZFk3WHBjcHhqQVlmWDllNXBIU3ZZVVNlSkZtSnRTNDYyQ09YbzNXODltN1dWcG4rb3E3VUpzOWxTbXFVVkRTbHFqcllFVTNkTytROFE2dGY4UFUzeks0S1Vqd0pHb0haLy9wNzRqRnFaNHBSand4YlZ4aHFVMHY4cHUxNUllUHZtS3hVM2ZxYzZPd1JaVTZCT0wvdEdwaDk4RDhZeURRNlg0c3o0T3RpRVhJalVxMjRDc2FSeFRmSHR5c3d4SzB0bWIvNC9aODVNdEJzUWl5c1VCWms2ZThaSFpZblQxYzFYUWF0dzc0V29NNWxmRzBHc3pPM09HM3dWSzMrWUtjWU1nNmI4UGhKQ003VkpuVDlIU0YyNG9pZFh3UitMT3d4RXZnS0xFaFlnS0F4RVI3RndjWjEvallpc3plaklIY09rdFJzUzNYWml0WEVlZ2dOWXVQK0dWV2ZpUG05a2paKytUbXRpZGFsMWN2WHJYTGFlS1NzanBPNW5BaG1hSUI2RCtIQ1BtU245Y09BMG03aVBra0tFYmt0eXp1eG9uVTNLL1cvVDdKRVdwODlCelVJZ1FGdkFrb2FuekZWV3NmOWV1L0dTSkM0Z052eVpkTmhHckRqNXdSbnYwMkl0WmxtK3BHN2drcWczMWdYaTJBNzhzU0N4SEJITzh4Z3FNbVQySVI1c0VkM1lvallPbFgvZG16UlpSa3U1aWl5MWhBa29wRFY2SG1DM2ZMM0w2Mys3RTQxV1hWWE9INVM1M2pwQnMyMURwSmYrTkhoS0xCM3czNzRndStZSXhqVDZtK2k2dDNpckdIdSthNUZGdzZwdEYzei9HWXBSUUNPT3hhZVo1djNlYmoyTm9xWTJWTDdRRkRqS2taUThDRnBLMmxLeFV2ZGFkd3FKTmlnS2xlcXo0SDRDVEtBNmRpZ28zcXFQUmF6OUE0VFNRNzZLU0J2MVcrd3V2a2NwTytyTTdJOG9Yb0k5KzUyWTBrOXlkbEpXQmlMaU5ROG9scWovdE0rcXFYbEZ6S1RJaFhUbVhla1BzQXhDeURtU3RLMGVLaEhoeU5QRnVvTjNJamNwOHpncTR2T0Y5TnhOcENyVWZlcGtXTHNOSzBCL2NFekxMRnNCZGZHbkRjb1pMRytiV0lkRGQzaklQcVhWaTBLMEFXcmV6VjZJbzdzV0JGL3FEbjEvd2N1MFJueG8zTXMwVnJBdEVmSUd6WUs3d1dHNnVRa29zNi92cjNLcmVtM3ROR3Zpb0R1TlNaYUtxNlFqWUxoUzgrZFB1UTlxMndvYXVlSXJELzNtT1NZSFE1d0d5bHhkZWU3TzladU1rMUEzcWdmeXBSZkFyc0N6R0xiT2dVeUJiZUdsNEZmQ0hHbWFoWHFwbTZLQnpZK2VQRFFjQjhyaWk1NWNaclkwYVpBdHVTN055YlcrdDJHbXBPSE9NL09yWFZtRnA2Q0JoQlFHb29xTHZuTHVEMU43dUJiNnEwR2pGd05BeXNlam1KT3hLTzQ3cVZmQUFUdUR5U0l3YzRTSUpZRDJBSm03MTl0WGQwTlA2LzRDMzZpUzVwRkNYaVkwQ24reEpaVEdKVmVjQkFuWkVYZldSUTBJVkdWU0RNcWFyTGZneGpoYWdlajIwOGhkNHpMeHBzK2JKSFJ6a1N0a3EwUVVnTjViTUM0Y3FqeTg5Qi9mYzF0Y1loNHlHNWVnTGh0LzRib2F4MlQwQTdHYmNhelU3YjhjbjZXeEg4THI1RU13bElzaldDdllRMENOajFFRWpXbkt3Q1daa1lUemdBczJyVWpFODQvRlNvRnhRaHp2Z1RPY3JZR3Y2MTYveVhTZVBjQ3dnMFltYWUvaHo2c2N4dTlFSGZpNlF1K3JJdFc4Qzl2TEwrcm5EMGM2OUpDY3d5T2VEOUtzVklvTXFieUEyTWc2VEM2SFdRaWEvRlhNUWdZVVMrazQ4NkU3K1A2ZG1aeTE1bzNQaWlZdGQxUDl3OUtQdjlPZWRIUWtHd1ZUMFhhMm51WElNZmlXdWM3Z1RtcTFqaEZxeG16cUhBRnlNWTh0bFc0bXpVZ1dJN2EyZFhjaGhEajhtcXRhQUtYMVd5UExRTnFBVGZ6OC9lYThiZFhUQVZjeUlvb1gyNFhXQ1lYcUVNeUxZa1lBT3h1RzNSVzhXeDFPTHVVV010TUNIMCtZUkVmM3JNRUUyOWlQRG56d1BuTGN1NTJpcWlqZFNVS1U0YVlueTh4Y0drSkFuV0Y1alBOdUsyQWZlWXlRbDliL2NDMStOODF4UFYwMlFvR1JqeFlHSW95dkRZaFBwSS9FcFBxSzVFRHhubThuWUZaemV2bi96bnNjSDkzUGNkMGtac3RKNUM3RmsyRytsR2NodzEzQnFJTC9hb29VV2pnRE8vUkI0YjBFMjV4Z1VITzB0YlI0dFZObFBsbmhlREI2ZDAreXRrZjBYN1BuRStmN2J5WHh6eUQrL1VRNjZIU2d2QVR2R0pYN1NkMUJKejRBQjM1MU9uOFJrM1dKYmZYaFk1bjlVbkMzREhUVkRqa1ZhN09memtKK3BiYVJaMjUwbzlZbUJEb0s5UGY2S2hUMGJNOENwbmZGRUZsU0NobDJsL3V3T3hLbGpTcXlURElKRXBES1JZbmJnTE5nWnJ4WDB4Y0wwd3hPdXJkL1NqNnppSmpOUXIyd3dvbExHYUFpNmc0WkF3ZWtvYUNTNlUxTnVmbmRnTGFoVWZqTmRxa3NVTVIzQkxaSWR2THExK3N6YkdoSU1ReER0Nzhtc21uTDRaTDNYODVIOTNLUlJ4a0FGUE5OOEpRYlJtdUtOQkYyQlhhT1dZS2pTNFZEZkhuNDZQNkxRTGdHdksrSHkrMXk2eVdzYVZJaWFuZG9YcEhMY0Z2bVIxNWxPRVVjN0dhdEs4dDNaWGpHbVo1N3NyYkVuQVdtdXJhTy95eHprQjErVms5NGFLR0JIUHZMTS9leUlsd3hTaTZTQzVXeEhmYThkVm95ckw4UE8rd1ltTmpCL0lQR3lNMEFUUFlhYk14UGVtbGFnUU93a2RHR2lCYmhqeHUvNVhqU2l4OWNaajhMNlp4RUtlMkVkRmdESlVBNlEzd2R0Y0xvWjRYZ3ovaUp2TlNZcklWUnJQWDFtL1ExbElqd0c2aXJxaVdMZGViZHhWR1V2MElBdVNNZEZaRkRrUTNuQit1dURacnBUWCtHbGVSRTZUWWgwdGJTTlRkVUVrVERWZU9jelRpL1lvU1lpVWwwVWlpVTQ2MXRBN3lva25Ka1ZkSFZhdW1RVmR6aVI0emFtbUorY21CWGZnYUJ4cFptVkZiai9rTGc0OUVrS1FFR0hoVGdRN2hkQkk3RTlVZStXZDBHM1Q2dVIzdy9tQVJzNFpBU3AxdDkxZEJydUlsRUl1V1BjdWs4Umo5eTRHSWVwLzF6RnZWckxrYjFvRW9SN0xSNVlWMU1rL3ZWVW9NZFpLNWRrQXQ1ZnlsMFNSWnJpSGM0Tm1pV1VvQWRpQmR5WlJiYVd3SnZFWGVXdjUrOXV6TkMxS2ZrVlF3Y0hRa0pRQXh6ZDJRNmZlSkhPM2xKQnJKRFk4eE8vQ0tXL3NybDVETXdUS2ZKQ1ZyTkZtZ3RkYktNV1Z6YWdPNXBOMWRtSzYyU1pVdDFqdHZrSWNJOWpzNHYyS1JKU3NGZVFJNVZXTlc0QXJNOUZaLy9vMjVvTDVIVVo5T0ZGWmZySW9nby9BWVNWWFVqRkJFYUZKNkRIaTRZVmJZeWpOWDN5Y2RIallLY0dLZU5VbjFMOXhzakoxNjN3U1RoY2pjV1JMTUo3aWdTUlY5OHFhSjNLUm5pci9Pc3hCV3JtRkNwL3dTNy9oVTY0QXpSemNUeTViMC9uUmIxcmRRN3owN3RubkRWYXlZS0oxSm9WUTR3QnZlS2xiUytraDVOVjdReHFwNWhpT004WVFkZVl1TE1ETDBaMFJmT08wRW5UK1REeW9RcWo4TkR1U2hwU3A0TU5BRHhFamZWLzZSYUpZTFZXb3h3b2FvU21OaDJQYU9mbTRJTnczMFJBamVJQTJkQUlocFBFd21OQ3BWM3VENC9UQ1FIRjVlRzk1ZVhGOWdYT3NGWXdTZ3B5MG9DbTNZdkZVQlJzSDExbzhrSTNXU0lneHNDUlowODQ4dy9ldm9SOWdzS1hCb2cxSW92MlB1d0FrR2hudlJhclNmSWJMVVZ3QTRucGYybW5iTlBXVUhrVG5pZXRtZGVvZlFCRHF2QVNMbmpJMjhQazQvSjgramVaSkFSUVR1RUpKTmFKSFB4M0JqOG5GQXNrTmM0c3FhZVBOdEZ1T0xzdVh6WjdtSWtKK2l4eGpjMlN3UUtLVVdMUjFmbHNoZDlrWHNrZW0ySjJYVDU0WTJ6TXh5REliMkZFalJzTFlhdGpvVGh3YTQ0eVZjNFh2Z2t2KzJDWXVwRS9ZdG9sMTVqbWhZN05WZDRwRDlkUVh6RFZ0cTZRcURYMEt4Wnh6NlR2YjNycmlNWHpleDNBNlpHNmQ1RktHazgxVU1mV1NxTFZVblpGaWhIUjJXUU9NQ1prQkRuam14UnRReVVQU3kxbS9nQUlBUGk5WldjUzdVemRndENXT28vYmtabWVJMUtiWW1HZXRrSkpGV3RiU0hhZVFsbE1tRWxaMU5QN2txYmQ1NDE5ckpWV2ZEQy83SDlzK0VieStyNndZSi9mVkttUm1sZld3aVBFdGNLd0EwYU05amd1eHVMUE9QRVpUWXcwb3RQMmlBbHBEQ2Q1YU9IMUFwL0RSbm1Ma0t5UlhNN0xKWWNhZFdTSlNvc0tVUDhsSnZiSzkrSUxranZ6RWc0QURaeG9WclZaZWgzdUQ5Snk4bk9qbEhMYno5WUpVakhndXlzTHZuUEhWRFNWVFRPOHZJcUVCeFptY1doUllXUEE1WUpsZTY1bFhONU1ubWRWNHFpckVWR0RZYWM4TEw5Q2JlbTBVWWQrSUNJaWVJbXlzTm5Ia0JOQVpYMHJmN3hiT3ZqL1VjenNEbVYxNGNnTS8wUXdnYkttbm56em50U1NJSDFadnNmemQ1NGwxYndRV2hSdTIxeEZsbjM3K2VWVUlxQmtIT04zRHhpTXF2VGNxbU1Sa04ydkwvMHhTM2ZqaTAzeVRqUjE4cTlnYWlmL3hkSVE0dnIwU25QWVB1RThlb1V1NUczdjNEa3dyQ2pEV0JBdWNOVEVtMnlIcU1pcm94ZllxRTMzUzVpZUxnK1E4OVFQcVRQMC9qczMxeDJPWGJualNoNDdEaXAyakx5eE43VmlBa01KcWRsN1UrS0FKZ3VBR1VWNEdhMlU1L0hxekNiWnRvcFNDOTNkVXpFRTRsck9Ody9zU3Vya0dCamdnZ3gxRFRzdUoxeGRjNHMxZXF0QWdxcHBqc2VDbEZHMmZJZDJocFNUSG80TEYzTzF6Sk91bDVCYjk1bThkQWsyQ2hJdXVvUjhlWEhpdm1zcExoR0JJbGJtRE1NSXlBMjRlQUZ1Y1lBK0pxUVlkbDlQZk5CMTRXcEtPbGJPaEhGTytIa3FRMTNPVEZWRm5OYkNYbkpvdCtKK0s3b0RRSzVVMU9Hc25QeE5HQkt3eTlrZUlQdlNrZ0lWQlNCaWhDNDMrdXNHcUI0QVlUQmVLTSsxOVZGZlA4NGpJR2dzV0t3V0RLRkhnaGMvWG9nWXN6d2h0ckI2am5rNEpObWMvZW9hVERMNGJxSFJOQXRVNldPRUhVdml2ZXRBa1NrZEU4YTVNSU16UEZXL29Va3ppMW5VdU45Z0orNHJHZHpZSmpoRU8rZjFjZWZ0WlFyeXcyNVhobEdNTTRRUmgycWV0VnZSNHhaZkNzUVU5UmFGUDdwemlCUjRxZmcyTGdQc3daa0xnN3lmb1VkTVQ2Z3Z2U2lsQlg4TWRrcHRVeTZoOWZ1M0krT3piS1JmVEd1Tk1uckErMU1NY0grZVBRWjc4TkxuczlMNFZqRTc3clpKRjBJV3UzejNCU1VHUTNVYjdhaGJhdCtqcGdoQ3doYXhqblVQVlNTQS9QSkRpL1Q0QmovMVl3SXdUM1FQZlZuMitBNTNkK0VTWG52enpBaEJaUzZ3ckpyeEJHYmprQlR0bG5jZ2h2S0IrUU1mUzdUUGY4MTdGOUQyQVczVEtodGZWWEVCZ05VMG8yazNJYXQ0ejlFTEZjdERFL0M2UXgwOTNQNm12QUZyTFdHb0dZZzRJQnF1bkcyVmNJVm5EV3Q0Y0pzbSs3UnhoRCt4MHRYS2d5ZUVKWVE4K0hEVWg0VTUzMHA2SzlkbGVBNGNVNWsvTkZQWEJPd3prZHpPRTVkelN5aUttb0Z3cmUyRGtXbWxua3ZVLzlHM3ZTenNUcm1oTk92ZmI4U2FLQXFqOWY3aXo3NzZBbkpZYWJucjhPQk5hb1JVaVg0YTI0RjVxSU9MWXZENVRZdjZJa1NrSGIyaU1oVjhYN2VXcFEzNzVMVlJ5R3Z2d3VhZjN4QXRjVUtjbTNGNitxOWFCQWM4V21wOVdOYmV0NlNnOWxmbFJSVnFvNXZNUFlwZnJaZnQvRFhUU1FaQzRjUkVqdFIzeitRb2swa2gzU294UXNHc0tyNHBONkNpRnJqVk8xQ2dmMDBFb3Z2ZFB1cGhya2gySFYrTERjM29MMkVpUVhzelVIR2hJaWRxMUI1MGZqaEVRV2VaQ0x6RG5acmF6d3ZQREQ2Y0lXTGlzUHgzRTREcnpETjYwNm5vQ0FyTHZnQTUyeUIrb0xRbUxtcU43ZFFMZm1rd0IxK0UzaFhLcXRNMVRxalVJS1E5RTF6a1hxR05RcElIcEtQWExQTlBZWHlUVzNaaGZkMGlsVWlxcWJ6Y1ljbHhQTVlENXhhZHBidytpUnU5TDVCMGthRTAvMGE3YXU1SllYN0hLMWhMeVZ6RS8zZngvTExubEJJV0R1WUFiUmNPK1o4L2VJVGJCOEs4aGl1c1JqV2o2Um5yUWdMS1Vhd3hnUXMvRzVXR2dLTyt2UVg5RnJkSkJIN241allGRXBNWnpnakRDdEVGdE1KTTNLN1FZZVpWcTB5dEdKdE4xZ0FCQnB4ZGhaMTN3TEQ0bjhZN0pjbktLejdYTm91NWI4WCsvT1RHcG1TSExUcGxUeXk2Mi8vdDkwcWFCVWRxT1VCRUFleVBiOFRndDYydytlTkVUNjdEVFN3MUx3RTB6eHpkZElvVkt3eWZjQnV3dnRRcWdFNy9QREtpZGNGZVlBclRrbjB3Nk1vRFZ4OVI5THpUbHFWc0hKZXluWjNqODFSNis1dDhtL0pTdFVUMWR6eTBkWEh4cVFGWFVKOWxCaXhLNmVPaE1hZFBHazBvNEdUTDViQWhDRWpsTDBTVjdFTFd1dWQ0TkhYc1RIRUhmV0UvZ3pFVWxSeEFUSkNUN25DcFVpNE4xeHFDck8yVU5GdnNkT2U4OWVUc21lZ2k2blFENGFQcWVqb2xBcFNzM3J3RmprMTNRN0poSkVNcWxNZm9zaUF6RmtpaDdTNEt0QnVYdlZWcm1kMTR1SDFmNkw0SlUrdlpmTEZyUms3UHVmbWo4UEt3enR4U2k3U1RmUlV1QnBjaHJJNXhJeTNkVCtMaHVxU3ZCVUJxTlFsUzFwVjRuYlRTQnk0UllFVmsyeTVKdzY3UVNxZUgyWHRZYlA1aXc4MFFRNm1jcWJYc0lqZk5KM1cvMjZ2MG1aS3NLcE5SU0VJZ2NrMVNYaWhCc2p5bDljRjl6TGg0aUFBRWJOeEpzQlFQZmxWRHR0bHc3RU4xdXJuVllLY1o0MTFmVDRQRmVsVkUxaXh3RXE3K1dhU01KV0lMcFExd284U1J4Wm4raWQxejRSYkZqRnNSWEZFZG80SE50RDgrR1hrcUM2NmtCVUppcVNFeGZ2WWIzVmpENXF3MzhyUmMwTWRQaGVMTWlncis4U1AxdjNqQlFKanRsUG5Ic3NiQjd1REE0K3V5VG10dXhhTUoxczd4WnIwMXZ0Z0V1WUpZazYxOEtFZ1RjZzZLSERWWlNJbUlBVlJqTlhmVEwwc2ZwOTJJR1ZhbGtFa2QzS0JxaXlDZncyRDN5QWNCaTNid2NWYzlSeFplVzhvWGtJcUxjSUg0THhNMHhMVm5tcTJtTytidWlSaGk4ZG5HYkpkZWVWdytWQTNxMEhscVJzVG5ydW9EeEJDKzZKVjVtdDFMS0lTRHg0QllPRHFtYmoyc2s3ZGhhVE5za2pEQnNJRCszLzBoLy85OGVHcVc5ZlRqWWVEZytkWGxEZnBsSWhQV2V5LzUwblJ6TE9aQU5kYXRBODZUQktjamR0UzFYRldCaE1uVnMvV09ucHVxR2ZmUlliM2p3UmZsSUJNUEpjdjlmZzdvZzJKV3NJVmhqNVRyME52c0RuUnJjcmxCZUtMTTlQRmxBTnVnQ3EwR2VldWxGMmhqNGtXaFBzVm05aTNhOXlTbmprTmRmV29XVmRKRkhDeWR0RFVHbWI1WGhIUDhyOElONVA4ZDAzaXc2Tm5aTUh2Q3F2ZElxN2I4N09nb3lydGU3QTFVTDdkVHlYeTcrM1VZV1F3NXBCNWdGakQ5MlRGSVpBd1k3bFJwd0dJUmFHWTFveHdEc0NUOXVXY2NFWDgvM1hZc1poeC9qeGVxdEcvdGZPTXFoeXF4ZnhuR2JsV3hpRXJERTV4cHlOTFRPbWRDSWpxR2E2bTZRVmZOMlZ0SmprSFhHRGJoSHNMc2V4MkdxQm81Z09BU0s4MitDelljeDc1aytvd2FXTEJ4a0tnbFB6L3ZTZWplNDVNMDVCSGprMFNPTFhtZlRCVjJvb2ZEZHozNlA0VHVVdWlMVUFLWGhnNi9EaEE4bmd2V1IyN1I4Mmc3clNiK2I5aTZJeWpyQWg2aGMyM0VPbzQ3NTI3R1lBTU9OTm95KzUxblBEYWZzSnlrdFdKamt0VE5lNFFSQVZwLytQeER1Uk1KVzFQeXdLY0d5cUdCelN6LzdxWVZGM0xUbjFrVGJ3TndmeG0yOTBUTEwxZU10K3REdE5GKzJZOVFWdFo0cXNVZnlGRHJCZUpuMDZLNWFOeGVyQldyZVIrTFhJRlVoQjEyM3lUODFScFhqUG9Lek9YWnUwZHNoTUVPbll6TndEVzQ3bFdXSVlycURJdllGR0tCOFVMMElzSTVtZ1dQSkhXT3ZtaGJqblAyeTRPMUhLUWwrLzlaVUpSVGJXQU1KSmRydzUyenVvQlJjUGZXZDh4c2FiRitVeGU5UjhVVXhGNVZuTnpRSFNNaHZiLzh2NkUvd2p1NFJNdEI1SFZaOGVZWkNtYTdTUUtReGducHZQR0h1Q1FUVms2NG5SZ2F6ZHNsRDFLRC8rYnh0ZnZLZUhIeWVSQytETWduM2J0Vm5JZTUrYVdhcFQwK2w4aDJaNlpzMS9sQWw5VGdxUjJBSlBPS0hyRC9vL3FBVkViYUVFVmFlSlBaeG5WbzhITkh6N0pFVStzKzFpZkpNMWFLQ3Q1M2RDamNDS2wrTEhxMXZSNWZ1cU1FdGNNeVJkTTh3V2hYUzMyVTRHY0duSE1kTnIvY2V6a25DTXNXMFVsa1JnanY5aFR2RE1qb0k1SEJtaHFpQnhWc2J5ckpqOU1JeVAwRXhCVTArV215dGxWd3RycmcxM2V4dmNybkxHdGx5NTlXYTRGaFJqRW83SEhXNGRIRWRLYnZxaVRmU21RdkdkWksrcUphVjVSWlZ1M3ZZUStBUnIrOE1mV3k1TXBLbC9pY2VhMFBaeThJWmtZaENUU1Z5RnRyVGpueHUwWDBYMnZ4TG80cWJWSDMvK0pJRE1zM09pZldObzJtZDFFSjJBeUMvVEZtZEFKdjJxWWxydThqdW5EaUg5M2xFSVpONThMQnBSSnM1U3A2eHptMXVMSTdXRGRYK2xQU04wRDVNbWVtYUxhV3lRaksvMGR2dGxHQ0F6MzFOSFpWQXpTRm40bmhhMkJxWlBsdnZyUi9vMGJXLzhQZEEvWVRIU0RIQzFuZHpyMUdwU2NLNW5BbnpXOThrOTQydHAyUjJPZnRJSncraUlhR0s5NmhKWnRvdks0WDlvM2ZnNkJXL0dva01qOXNTdWhKbXlHTHhuQTdWR2dNL2czbDZGZmNnbzVkdUFBQ0lhSUhlK0o2dmZEemJ4RjRtVnpUeDRkekMvUG1Va1g1bkI2UFFjWC9aQ0lUQnRUK1g0Sll0bTBuWGtoZ1RKNHJFdG5IRmpzK2pNaHU1UGVOeUF4WnhTTmFNNWhkNzBOekVIcCt2NzRZU1h4S2VKRVR6NXY3Skc1ZG9LaEtzZi81TFdxSkRscmdFQVVDVUlnVkpFRFFaaC9hR0RBSCtKSHkrREJlRHhhR0lRL0lVUDJvdmI5NW1Ta2F1MVkrWnduakdzVWk0dkdkYUx1bnM1eHgrRytyQXo4VURUZ1h0TjhITWxoUzdSY2hiT1RyK0JhOXFkek1KRXZtQmNtelV1R0pzUEQydUtPSGIvNjRXcm1Tcm9pQTNkVDNpTThNUkJuT09aRjhkcFhhSGFnRjZ4aEZ2RTVKdmd5S1AwSkZMSUhXRlJZWjRpM3VjeFp1OXBEZzRzT2pKcThLTGJReUhLeVJzTEVBNXIxYTE0K3VPY1hLaThiYU9FSUJnNGQ2SXUrTmlRaGU2bFI4OW5RbVNDSnJzZGJXekZneWFUS0psenZiMzlocEZ1YUJ0aXJ4VUpHc2NLZE95UzV1YkkxbVE4c0VJRjljeDE0SzM1RjFpRG9OWkJHZUlvZlVOS2NqOW51ZkNTUlFYYk1aZVYxcHJ1cU1EaDRYbzdRc2doVks2aEtzZ0hpTWVoSlQwNHlDakQxQjVzZU1aZC81UDh3ZlBNeURVVzJnT1BCRTNPTjl3YktJN24weTIwMmF1ejR1UGhSL1lBUEo4Qno0ZnFpVzVOTUdyWmlwNlJNdDZ6SlVUSmNFQ2FYSEp2TzExY2RGdmlCSUNHRzZIQTlUaEk4cUVxL0czeVdmSWFYalVGU2lLOUI4ODk4c0hUbkoxTzM3c2xiVEg2ejRyd3dBUWRFMFFzUFRBTklndmJQWWd5NnhVTGhPbjJyVVBiYVgxcnVtdDdhVmI1SC9GRnpzbnNqK0hzRUt2WFZ6dm84RHlTMytubXp1aDhpTlZSYnQrUXF3SDRSa1d0aXRMeXFOMzUzdlFodHVhQnh1cXBlQUZrVzc3OE9yZFpEekJ4UnkyNjBCemhYTU50SWhLMHhKeTNYRjlWVERncHVabDU3T3pkTGJtQmJGRFQ3ZDZXYjFCUzkzem5DUWZONXhNczkyOENuSFIzYWJZRWcyMUdCeVRkV3F3bDhLU3h1VDBNRjh3RTBLYk9SeDlKVnN4RElabWRQeXV0aXZkcXFFQitkUkkzNFVJa25DTFo4MGFNM3JxS0RRLzd5bHYydmk3blJwRkpWNEcxQnJKVUJiR0Q1YVdyKzlEeHI4TDFNa0FwN2RQcnZETEtxSnNJQWQrcXNLNk1aU21UOGtHOEVEN2pvZWo1cER6c0FYOEVtOXBWanltbkhzKzNvS3FoaWFwNjNNSVI3WmlWS1czWTVQd044a3dtaXNQdkhzVVZwdTlxZEtibUoxSTdoTEFWTnY5WGR6OTJxRDlHVGhjOERpN1hPbWFkdzZaTHdhUElFMU9mS1ZzWEdZYy9hNDFaT0VwUjNZcElVc0t6RStBNlBaenF3T05pbElqa2VnMitXendiMVlaQzNWMlBhaldKSzVXQ0QvYTBYV2h5VVVvM1lxbnR5OEFXSnB5ekVnOHFqMU1GbnQyWGJvZ3BJMk53YVNPWkhMLy9OY3RyQ1FuSnlyalBQUFBDbzVZbXlEN09LL3V0WURQWXJCYVliVUxPM3hPMGhTVG5ueHR1T2pMbXhWMnJpYzl4bm1CejNKbFBKdy9Lbm5vR3Z2VE1VUzdXbWJCZWc5MWpmczJzdEY2cVVuT2pNeWovTWhoMjdaSmMzRU1zU1g5MnYzYU5nbnRuM3JxNmppaXFTdmtvWFZoZ0FyZHdSWnVrVCt1VjZodys5akpsN3ZubzBkQTVtRTZzVnNla3ljbjFueklFM2ZiUEhXNHZnalpJalFUKyttZlpsM3ZUQXcxYTFObHJMREdua3ZUUzJlOU1YTS80TE5Ub21HUFRoSTRVQ05wME45SElXbGg0ampFRHJWdmw3NjJyYzgwd0ZacUFENGVTZWJXMy91OTVqc1h5NUZXdkcwVWNsUGh5SjNqaTFtYWZzWEJ3RTZOQ0VkNVpRY2xoQlY0RkpBT2pONVV4NHV6SXpKZi9NWVA2aGN0S1kvSHJ3TVIzRkt4SHFtMTVmajNRU3VKc1RTMC9LUXVlZ3RQNWEyTS9QRHJJRGhuSC9ZcjZ1MkFlZ2J1cldsbkN0OENYWVlDY0d6ejRoK25LVlBHeTBERTNQdjZndEljYXpSUUpwVFkrS2FyRUxzbzh2eGpDN3FjT0wyUlQ1VmJOZC90YU0wbjR0WWN3UmorU1FyYjZTRTVhYUxOMmpxYlVsNjVKeDlVMCtGeWZZaCtaVGo2V01MY0FPUU04b2NoUEUyVE9jSzgwZ0dCTERBVnBvRVU4T3l6SlVIS3JwNFVOME1zOXhKaFVMbmRxV3RvT1FKemwzYjZQaDJhTU1SclFCUVpQQ3lSUWg2MWJ0WU12L3BWRi8ySGg5cXB5SmZOUVgwaHlVU1dEZ2dKaWI5eTlwSm1HcDk4ZEVzQmU2bGZaMElNb3cwRnpqNFNqWHFMT0dvcGRhQmpqWHFQeUVwSjUzVHUrVm5Oa2FmVVJFd0NlNGs1VHVOa1VqOGRuMFhySjFCaFlDV1hGbkdvZTRnQU4yZTNpajVGajdyQVpQU2o1UEQzZEUrSlFRMHB4NnZzUVVBMUZUcTJ4YlYxdk1MajdaT3pIaHkxYnovRnd1V3ZUSTNQZUV1aVIwa2hid1RQK2NMOENTTkpzdHRIZ1VjZmhoRGVvWmxYbXlrQ0w1ajJLR0xyanBCWXpxZ3JzanFIajFaRk1IUmFOdmoxdjI4SllLVGx5ME9DR0diejM1Q09wWDVPZmZDaldpWUtsUXpqQmZqbHBOVTIrYUJUdFRZOUdVanAzWHZqcEh3bXZKZTNRSy9ta2Q0V3dnVjcvNGtNdWdKNDJoa0prSnpFVlZVMVBzYTRmaHNoUGNiOFowVUhhcTU2TmJkcUFlSWNtV05INXVNK0FhdkRZbmxyMEE3cVY1ZHkzUmtFVXUvTUN6RUJ0bzVrMTFQSDhRV2tRNjJUQVVycEFpaEpBakZyNzdCcTk0SUFBRzA4V1ZCYWg4NXphdGxnL1djMWtialhFdHl3M0I5aEpnQVJhZm55MGYxa2hsU0puZStyM2s4dnBWeEdQSWY1RVVsSnZRUTdYMUVNRlBpMnFlQURnWDlGUkRTbmN0ZXhQNGVVYXROL2ZBcDRwazBPM1ZoazZuU1IvNURCSkszSEpzTjNveFFyRTlNcHJYSXlYd1pkSlJDa01YTG9Cc0trYkRESWpiM3RKZktiUWE4YVRncVBSOHNqaDRvcitaMUJNZ1M0OFJ5RDkxNnUzNTlXUFY1aSsybXBQWFRCa2tSOXg3SVA2V3BkWmJ6Vm1uYWxia1lVNWcwQWV5Tzg0T21kN3JTZ2M0dk5GM2pVbHo1aDE3clhwZ0ZSejl2UE5LVytocEpOZWIyQVNGMjFvcDhyMmVJblhjaE1mY3BqYVBJclUvb3VtanlPTzU5M2tIWWltV0hralhOMlkxVGZCTloyOGhmWC96bXhMWTZESWR0eHRNbUduc1FxanlKN2k4MzZnb1pZVlc0dVF4Y21kVWMvK3BTM0FjYWgrRHhpVHJ0Q2RWM05lS1B2Y1NMRElEWnJEbGxidjdtZEQ3bTNaWkwxQVA5Vk1aaFQ5dVRZcVYyZmNTUDVYVFBFd3FpNEx5MnRCUVAzVk9QN25LbCtSZy90c1owU25EVTdGeGVyTXBOQzZ6M1lrSStXdGxGRmlzQTR0Y1g0U01pR1RmcHplcHBpYlVpQUhIbGV4TDdabjU2YmpZU2lWWjJPUlNhU0QwSG9VZWRwcFF0M21LL3d2VUN2ZENXaWdwWHIrUENuVk4xYmR2R1ZoZmU5K3VPRTZqZDk1TnZhdmpxajNuQktkb2JvVDNoeWRCMXdsY0pFUFhPZFJUUXFDVWdXTHVocnNHdUVhb242NGZvdTdZSTVRS2ovSlhUK3FzN0ZHRkpFSW9XbVdwT29ZcTBDTGRxREJRZEhTaGJhOFA3SURqVXRLeWlxSFE4OVhXU2drNE5DUWtDZ3FIV0p5aklndXNpRWlObCs2d1ZpaVZ0YlgyMTFrWEVFeEtqRlF3SzE1cDhPTURLdzNrK1IrVjA5Y0dLWUpReDNUNGg1Tmg1NC8vZVZnVzVXNTJsMktBRE5SQmpUY1NjMUcvU00xTDZwR2g1TXpwaEo1ZlgybHRVckhVWndjbzNqRmJIcENJRzNoalhodExabXpLVmE4UFhJSDVMeWJTRXFyQ293R2FmMDA0WU00bHdCZjlWUXBHdCtjUzRTYzg0TTlWQUl2ZklKODUwa0liSm9BRUdJTXJOdmw2QTdjQWphYXNkSU9yUU9JVnNwN2Y5OUwvZFZlMGVKaFJuZHFSczBlcjFoYzd0Qm1kdXBDS1ROT3ZyT3hRaWlkNHdTY1V1cHZraDZVSWEzMkUwNFFXQWluVFZIY05QUC9WczJWZ2RaZGZGZUsrd05XQlB3bmh1MVFwQVNFTEV3R2dmKytEenJ6VnNoVERhVHRlNzF3Q3FHdHdFYTcrb25wdWFraUJvN0ZBajRwc1R2dU1YM1VIVTJ5N1p3QlNmajNKQ2hzaXFPY1NlRzByQXMzWmJRNWRJdWF6U2VYNW5CTW9IUVdocFFGOE4xOU02clhyUjNlVnBRYStEdWthdkdldURpUlVpMmx1VTJxcEhxM09hdmxzeEE3R0wvYm44YkNOU0p4OG9qSHpybFB5bmkvYTQ1eG9hRTIyaVBDZjJWUWRwVHB5dTYrb3RHckswcEp1ZEI2ZUNzMkhBWStsUS9HQkR4cGZINkxrMHFmeVNlMDliNVVwQ3dLYXlwL21WR1YxU1pvanF5SnVCOTViVlNDOUNaQWpEd3Z1RmhDQVFONXNiZ25sRWZPTmljaFBETzRzQUFqZUpXYVFVVWV2dWk1bUJRNkhUZlNlYXNhcjUrUlNxcUZ6am12Y3h5TU1rWXFHamJMNnJBaGdRRjdMeC9KV1NCUEFUSlFKUzM1L1c3SUZuR1NrRkNSWFFhbGx0dkt3TGcwU1N5elEyM0YyMCtaN2JKZmlJbUx0Qk10WTVRbzZCZUpwQnAzNkZzdGxYNTl6OWltREpjaEFuVXpjM1RkbTFMTVRRazdJUmxuVnBYdHpZWlRnSGd6dnI4Z3VwY3dYbm5wYkhQd3huRjFTUlJtcXQxRnlGY2NvejVjcXNwQ3B1eStraHZXcHNTcFdlcnB6R1pMUm9NenQ4Yi9JRFZPSGVJeFBPUS9qdDNiWlprVG1NSm1lLy94SzJJQlV2cTZuMmhrY3diN2d2b1RJdTZleWFXcXVxeWNQQVlSUndmRXRZanpWTmhkRzltaW9ZcUZLUXJMaENJVUlQUW94ak9VZnFiamlaYUptZmNWQ2FYQkVLME9OMW5xZWpyZy9ucGxHOGFjU0pqajlWTnFpakdwcTN3MHhPTXZZaVJMVVhxRXl0eFpVT3RJejVmYlhyQ2w4RCsweW5rb3JaakpmZ05WdWhINUxvdkZrVHRyKy8rMFJud0oxWEV5RXlQd2R6RmNrbnh5ZmZiaDArSzVuaUVJYzUvUjlpRTBWcENoV0REeW9VU08zVUdxVXlNTWJHSDYzWnh6RDcvdVcrVGgweGFQRzJtYkNDYjFhaG83R2NGNS9oNmhIQnNyc3FUS1lUY1RQa1ExWGQ1SXN1UW5xQVVqSnVTeHVPek5wOTVnS3kvRGZMMXdxQWx4ek1hV3c5ZU80QnBjOWhOaGhuU25ic3VDKzlVZ29RQTY4a3VTRkJPek9iSTQ2Y0N5cGIrUkZjR01xSUZ5OVRLTzU3LzNvT0VZTGI2K1Y4QUpINlo3QVgvb3huNURkUHN2ejlkNFVjaGlmcE9nNVNhSkpFWHZqdEtwUmNZenduOHFkOVdBVGVsZEN6MWJ6eXlYME94cjA1c1pLS2I5SlJGV3YzVDVycWcrWnlOL2NHb0xGcGhMQnhnSC9oYU4yYmVkd2UwSkx1NE4yc29FTkppeWErOCtuRWlpK3N3dGp3eC9wcHNIZ0NPaVdLa0Rxd2FmUDdHVUtSN2tJR1VGNU1UZ0p5ZWZFZTFvdlNmbDFmM3NaZ2M1b0ErUzc2M0FLOXl4Z0RRQ0laMnMxdHNPUDJ5Mm1pSTl6QUVLZ05za3V6Tmd5d1NuOE14RnNkYUxKTkpPamRpV2Ivc0pVb0RZU1Zib3dtMUQza2RnVVFvQXlDWFVjUGNxTFZ6UFhEMW9zUEg3ejBaaVZITmpTb2VQblg2VmlJUW1FbFhieituUWRiMVFLUGNYclRZVEg0QnlxNktMZkJZOC9YZzM3QmkvS0Y1VUFZaldqaFoxSzV3WjdIekxHaUhhT3BaK1ZqU0JNTktqcnlQTE80QjNtNlM4NXh0N1lsK3FNc2lLTnA4N0d1VERramN6eTBVbGdqUzBSSitjc2NjVjY1VHJBY2lwbzkyd1J6QzlGKzFWK0QyYVI5cDluWXAwWU13Q0d0WkxsL1o0QVpTSTNBcVIyMlQvVWVsY1R0M3pmSlpKR3IzdW1lZHJDemxXYklWRjNPVzF3L2NqV3Z2QVR5VTVqcitDdUVQLy81R05ZWWx2aC9IU1pGdk5DSnhraEkvNVZkL09UbS9RbHNyam4xbTVYd3hQTnUxZENnczU5bHUrcUZ4V0tSWnpLUmxGdXFCcCtGaFMxWlBURFIrZGpnTlhhZWdoUmZGWUJDcENVVUZTWVMwcWYwWHhmd0t0MFJxTnFGNjJMSDltNmFGenlWNkdzNjhXL0o0SmxwQ3RQR2hVY0RZbFZ3Ui9vell2ZlZSWVE4ZWwvTlBpaTdmdk9FdVBVeStvMGRCMHVnaEhYbnhpUm0yenM3bWc0UHBELzF3T0plRitiYlc3Qytpc1FjbWFlcDNQbE1ZdkN6REtQeXJxaExOcm9na1VuMVoxeWVLTVRqSUY1MUREa2dSc1lFSHdXYXhkSTBEbCtVd3FKNHN0eGNibzZFeXA3cVoxVG5LQXFsc0Y5aGVuTy9jY0hHNG1OcGtKMzgxV2tCN0hKWXZCZVVZRzhNWmpqZ3o1WFN0TUNwRzM2d0daMFpkYkxXcEJ5c2Z4V0JnVERJK01xM2RKVlZISE5rUWo1L2JvcXoxZ1Y5Q3BFOFBQR3FyOE9VSnpFV2Q4NEdjYW1SYUFmY1hMdEdyS0tQZUNlZzF4RHl2TENoVGZQUk1LZmg2T0RZSFJubDlTK1dRMEJLL2xGckl1YytGZGZnY0grWEJuenh1bHQ3RkxYb2hCL1lsektjMVVOSWxSdEpmcEV0dzg4WDM1Q0FBQWNTR3FBcjZBTHI1YXN6R3RRQjNYVzF6Z1hiQzk2ckRRY0JkR2svNzhKdDVEVnF2WGRMazdLMjJwdkJJUERFeTRvakJpaC9ObU85VHlFQlN4UUdvQjhGTWRyb2pHM2tZNmpBdURYMmpiTFQ4RzFwa2VLNlJpQW9McTlTUWJLeDVNcUE1T0dPZkF0S0tkczhsMzFUT3VoU0toVTZ1Tk5OWWpZZkMwTmszeDRpYkwzdVlvT1lBOE8xZ2ZQOVZJMTRTZTY3d293Ym1ZaXZaQlB4cnB4c0F2eFZBcE5YaHhZaFZ3R0tGZHRUdTNjQktTS3BGRDBacERsT3dlMnJWVk4xMHRjcjlzZFJDdUJLbk5iRVRzSHNlMGZxRzA0cENFYmNqRHF6MldWNXF5dkdFS29PK1JHcjMvek1RL2tZYzNhRDBUUHpTYm9TWm5wSnN5NnNLNktORzhRMDBRM0JNQzQvRW56M3N6Zk05R1FmTHF4Q2pVM3JtYzVtNDRZU3VCT1ZKbkxRMEw0czNNUHNsaEY4Q1pTb2lpV2xkQmViU2VwYVZmVVdmKy9BeExyVTA0M2RVMHZXanMrQVBKaGprNTBPMXIyd1FqdWN4eC8wYnVZK2hLYXZQYmlUZExTNDA2dlVEU0xKTEFSVWpHV0pxQ3BuNFBISk9Zc1J4ejhybU5tNy9QbVMrME1HSlpGNlV3aW5zdnBreUx3QWRwMkovQTFlVWh0UFJUak1vK0J4Nk9sVUFDUkd2TEdJNGthNFg5THVDUnFYc0VXU1hTZlZJNXNSdCtOcWlTSld5Vlp6RUVSaDliNUY3OVhUUVhuOWlDSjhFcGJqb0E5bU5MRmpnOWVod21wOTBoUmtOMHNtZSt6dmdvQ3hHaFIxaVY1NFdydjhvVEh3QUloNUJvbnVQTS96Y0JjSHNXR1FXaWtrVnpRamx0Nm50TmVsNXVCUkRMcVhYZVdUb3U5dURxQ215b015TTRkWFh4Q0VCeU9NTWIwbjI5UmNIODRXalhpWFJQVmN4MjBLaGNFRW0wQ0lSWTQ4bzdRQzd4NXFRK1pDeWQwaWo5aXQ5V2ExY29VN0ozV2k2Y0EzRWVnQ2pNU0pHUUZNZXJ5UjJtUXVhTkVIdWhWcmpwNjBqbHRKZVBPNzV5QlZ6RXJGMmorck5GZ3l6ZEVJc1ExUE53d2xPVUdmZ3ZBUlowT1MzbjhSZUdNYURRRWZiUStKWnFEaWhQaVZ0bGR1TGVWMU9mSFhWaUdpYXBYQUU3ZHZhQ1FhcnliTHhmTy94VFdYdEdmRi8vYmNldXdhcENSN3YxTjdScGpPS21LSE9DVEdzb3pmTjVCY1EwemN5VEdNMGJqRzZ2akFZMUhCMVJqTzNZZC80ckFPVUFPV0pERk9QK3p1TWI5cGRFMWZHWWRHWS9Rb0VIVlhMOUdmcURPWGhubGh1ck5ONUJsYmdPYkwrZUpwVk9oTXNLQ0FOaG5ESzEvQzhOb05qOTRoMzdBY3BjZkNaUUU3QkNSR3dDeVk0ejEweXRuWFVGa2Y0OGppemdubTU2ZlNtM1FMWXhZaWNBbGZ4WEloTzVJNFRQWC9jekErTXpVNXZ3SHBndzZBWElkWFZSZmxOclNZUUNZWVFKaUtHUS9NcCtWZy9uUkRXNzdUNGp1NGIxR0x5eklYRGo0blJ2elc3aG5BMzRHV0JMNVZyNWsrYUpSdGU1RTdXdzVuNFBPSXlldGJvVTBnbElVdnRVeGIzNTNtaVJqS2NRenVMR1l1RCtrQkxIV3FWRU1ucnVmdHd1bEpSdGprVEpLc05wZnpRK2dNQ04wbkhxV1F4YjhHQkhLZHA0cElNeTVlRktHSklRM3NiNm8zd3J3aTk2bGJUeUtkZkdUeDJJYTRJU01kWlRlSm5MV3M5TGpTMWZpU2FmWitQVWRtNHNETktwckE1KzdqcU1MSnZIVkdDVmJ2QS9XRmxXWVRhZlJGT1NoRS90M1BnYXl6OVlyNzF1M0pMMUhsZ2tBbUxrbk5ualpocm54bythNHlKUG1tUVduTUV5ampXMEZWR0V1Y0FRMEluOWUrN1U1SXZ3eGJuWEdoTkN4c014Tk9CM3Z3UDFCVzlQQ1VvYnNaMk9HNStvQVk1cnBld3ByKy80SEFjanNuenF3aFltOEZnRk80QnNGQ2pOcm42TU91U3lPNnJrZ2Zta0xlNFRXbHM1WWZvL2JCOEF1Q0NRVHQrck9zTjBvemFXVkJwMFRnOVBWQkhSYWlOc3ZVa3ZOcWJ4eGRYZ3hzTEFTT0c2Zk1iNHpKRERzcmVEZng5S29BaUcwT0VKNmlFZ2Qyc0VjY1F1S2RQbC9BZkJJL0ZFczZoOGszeVZ6d0xMQ3Q0anUxa1N2WDVmNUg5UmZKSUdJODVEb29FZVpEZS9tMW1WRDl4ZFlaUE0zRWVTZ2lmYW4xUzJPdm11alViKzMwZ0VjcFBkb1c0bTJNTW90cUM1eUlneDJEc0xBZ203Umw0VmVQQjJpSHNkcUg3c0lWbURET21ydWNQcjl2STU2aXEwNHBiVnZkWXVIN2EvYms0VWxOb3NSVEE2RVpJRHlTMW5BczNVdjllOTZwL2RqRFFKZVpMaUUvRlIvaGIxTXhXazRoTFBSTnB5YkJSZ3pVRGNFVGw2b3d2aW4xbnpPTGpaQlZicWRyWGYxcWRkckZlWXk2UEpRdVYvWGdsR05pYjVjYzBERXBRMjVwOGpiaXl0enNxdG5HQS9GQUx4RVdJS2VubGFQQm5iNWlyKzduOEY4NHFnWXBvb3V0OGgwcWhuMnR5YytYQmpycEdFOUNCSUljc3d2T2xQZWgreVZlZXlhTVVZL1VsMkpLWFc5bjY5N2NEWWhybTdrVmpGVS9iejlscmIyUkZ2UXdTeEpHZE15cm5DeEpRSEVxRkY3QXFDOTJjZ1ZGejdmODc5MzFEOWtGY1FhRHd1U3haSzhoN2RwUW4vRzg5V1JBWkRLUHBURGF1MlBSQkdwMVNuQnRJM2NYUlNRT2oxU1loc3N3bmd3T25QSEZRcVZicWtzaXNFWGdWaEVrekNNN1k3UVdlYm11UjhQeHlpSk5kRTNROSt5WGJwWXNpQ0g3YmJmRHE1NzdJRVZlUHNZTzJ5dGo0ZDlyd1l4ZTZLazRJS0tqZm5xVDhyTm9CR0NMN0FNdzZ1TkVOSnhRcHNmWFl1c2MwOGtVVmdQWS9TOXJOUHlHZlU3M3ZocEpIQkIxczV3WVpoVkdCR3d4Y0MrOEttRngzYi9yYTRwRmtCOGEyaFhhZHcxZzRxb1F6TVBjUDVyN2FrcUl0cWhOUWNqUUcyZFNoZnB0bHBFSTQ2R1JXWEFpRmRtRGpWaklVam1RemVsN0pPb2N6ZjlTZWZOT1llOXY4ZHFYaktNQTBITmRqWGk0aEFsbXoyU1d1M2l2VTwvRGF0YT48L0F1dGg+DQo=</req_data>
+</xml>
 ```
 
-The Sub-AUA sends the authentication request to the AUA using the integration API provided by the AUA.
+
+| Field | Description |
+| :--- | :--- |
+| `client_id` | Unique identifier assigned to the Sub-AUA by the AUA. |
+| `req_hash` | Hash generated from `req_data` to ensure payload integrity. |
+| `req_data` | The digitally signed Authentication Request XML payload (`<Auth>`). |
 
 ---
 
-### Request 2 - AUA to UIDAI
+## AUA Server Processing
 
-```text
-AUA
-    │
-    │ Authentication Request
-    ▼
-UIDAI Authentication Infrastructure
-```
+Upon receiving the request, the AUA Server performs the following validations before forwarding it to UIDAI:
 
-The AUA handles the UIDAI-specific authentication integration and communication with the authentication infrastructure.
+1. Validates `client_id` and Sub-AUA credentials.
+2. Verifies `req_hash` against `req_data`.
+3. Validates the XML syntax, OTP parameters, and digital signature in `req_data`.
+4. Appends AUA-specific routing information and forwards to the **ASA** ➔ **UIDAI**.
+5. Receives the response from UIDAI and forwards it back to the Sub-AUA.
 
 ---
 
-## Complete Request Structure
+## Pre-Flight Validation Checklist
 
-```text
-┌─────────────────────────────────┐
-│ Authentication Request XML      │
-│                                 │
-│ - Auth                          │
-│ - Uses otp="y"                  │
-│ - Device                        │
-│ - Skey                          │
-│ - Data                          │
-│ - Hmac                          │
-│ - Signature                     │
-└───────────────┬─────────────────┘
-                │
-                ▼
-        Generate Request Hash
-                │
-                ▼
-┌─────────────────────────────────┐
-│         Sub-AUA Request         │
-│                                 │
-│ client_id                       │
-│ req_hash                        │
-│ req_data                        │
-└───────────────┬─────────────────┘
-                │
-                │ HTTPS POST
-                ▼
-┌─────────────────────────────────┐
-│           AUA Server            │
-└───────────────┬─────────────────┘
-                │
-                │ Authentication Request
-                ▼
-┌─────────────────────────────────┐
-│ UIDAI Authentication            │
-│ Infrastructure                  │
-└───────────────┬─────────────────┘
-                │
-                │ Authentication Response
-                ▼
-┌─────────────────────────────────┐
-│           AUA Server            │
-└───────────────┬─────────────────┘
-                │
-                │ Authentication Response
-                ▼
-┌─────────────────────────────────┐
-│           Sub-AUA               │
-└─────────────────────────────────┘
-```
+- [ ] `req_data` contains a valid, digitally signed `<Auth>` XML with encrypted `Skey`, `Data`, and `Hmac`.
+- [ ] `req_hash` accurately matches the current `req_data` content.
+- [ ] `client_id` matches configured credentials.
+- [ ] A unique `txn` (Transaction ID) and current timestamp are assigned.
+- [ ] Transport strictly uses HTTPS with valid SSL/TLS certificates.
 
 ---
 
-## Validation Checklist
+## Common Error Codes
 
-Before sending the request, verify that:
-
-* The Authentication Request XML is well-formed.
-* The XML has been digitally signed.
-* The `Uses` element is configured for OTP authentication.
-* The `Skey`, `Data`, and `Hmac` elements are present where applicable.
-* The `client_id` is valid.
-* The `req_hash` has been generated correctly.
-* The `req_hash` corresponds to the correct `req_data`.
-* The `req_data` contains the correct signed Authentication Request XML.
-* The Transaction ID is unique.
-* The timestamp is current.
-* HTTPS is being used.
-* SSL/TLS certificate validation is enabled.
-* The correct AUA endpoint is configured.
-
----
-
-## Common Errors
-
-| Error | Possible Cause |
-|---|---|
-| Invalid `client_id` | Sub-AUA/client identifier is invalid |
-| Invalid `req_hash` | Hash does not match the request data |
-| Invalid `req_data` | Request data is malformed or incomplete |
-| HTTP 400 | Invalid or malformed request |
-| HTTP 401 | Invalid credentials or authentication failure |
-| HTTP 403 | Access denied |
-| HTTP 404 | Incorrect AUA endpoint URL |
-| HTTP 500 | Internal server error |
-| Connection Timeout | Network issue or server unavailable |
-| SSL/TLS Error | Invalid or untrusted SSL certificate |
-| Invalid Signature | Digital signature verification failed |
-| Invalid OTP Request | OTP authentication parameters are invalid |
+| Status / Error | Likely Cause |
+| :--- | :--- |
+| **Invalid `client_id`** | Sub-AUA client identifier is incorrect or unauthorized. |
+| **Invalid `req_hash`** | Hash does not match `req_data` (payload was modified). |
+| **Invalid `req_data` / Signature** | XML is malformed or digital signature verification failed. |
+| **HTTP 400 / 401 / 403** | Malformed request body, invalid credentials, or forbidden access. |
+| **HTTP 404 / 500 / Timeout** | Incorrect endpoint URL, AUA server error, or network timeout. |
 
 ---
 
 ## Best Practices
 
-* Always use HTTPS to protect data in transit.
-* Set a reasonable request timeout.
-* Generate a unique Transaction ID for every authentication request.
-* Generate the request hash from the correct request data.
-* Ensure that `req_hash` and `req_data` always correspond to each other.
-* Do not modify `req_data` after generating the request hash.
-* Log only non-sensitive request information such as the Transaction ID and timestamp.
-* Never log Aadhaar numbers, OTP values, PID XML, session keys, HMAC values, or the complete Authentication Request XML in production logs.
-* Retry requests only for temporary network failures.
-* Do not blindly retry authentication requests that have failed due to validation or authentication errors.
-
----
-
-## Output of this Step
-
-After successfully sending the request:
-
-```text
-Sub-AUA
-    │
-    │ client_id
-    │ req_hash
-    │ req_data
-    ▼
-AUA Server
-```
-
-The AUA receives the authentication request and begins processing it.
-
-The AUA then handles the communication with the UIDAI authentication infrastructure.
-
-After processing the request, the Authentication Response is returned to the Sub-AUA.
-
-The response indicates whether the authentication request was successful or failed.
-
----
-
-## Next Step
-
-Continue to **Step 8 - Receive Authentication Response**.
-
-The Sub-AUA will receive the Authentication Response from the AUA after the authentication request has been processed.
-
-The Sub-AUA should parse the response and determine whether the authentication was successful or failed.
-
----
-
-## Notes
-
-> In a Sub-AUA architecture, the request sent by the Sub-AUA to the AUA is an integration layer between the Sub-AUA and AUA. The exact request wrapper, including fields such as `client_id`, `req_hash`, and `req_data`, is defined by the AUA's integration API.
-
-> The `req_data` field should contain the authentication request data agreed upon between the Sub-AUA and AUA. If the AUA requires the complete digitally signed Authentication XML, the Sub-AUA should provide that XML in `req_data`.
-
-> The Sub-AUA-to-AUA request and the AUA-to-UIDAI request are separate communication layers and should be documented separately.
-
-> A successful HTTP response, such as **200 OK**, only indicates that the request was received and processed at the HTTP/API level. It does **not** guarantee that Aadhaar authentication was successful.
-
-> Always parse the Authentication Response XML and verify the response attributes to determine the actual authentication result.
-
-> The authentication flow described in this document applies to OTP-based authentication at the Sub-AUA integration layer. The exact AUA-to-UIDAI communication process depends on the AUA/ASA integration and the applicable UIDAI API specification.
+* **Secure Transport:** Always use HTTPS; never transmit over unencrypted HTTP.
+* **Integrity Guarantee:** Do not modify `req_data` after generating `req_hash`.
+* **Idempotency:** Use a unique Transaction ID for every request to avoid duplicate processing.
+* **Logging Hygiene:** Never log raw PID XML, OTPs, or session keys in production logs.
+* **HTTP Status Distinction:** Treat HTTP `200 OK` solely as network success; always evaluate the inner `<AuthRes>` XML for actual authentication outcome.
