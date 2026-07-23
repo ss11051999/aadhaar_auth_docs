@@ -40,7 +40,7 @@ The Authentication Response indicates whether the authentication was successful 
 The high-level authentication flow is:
 
 ```text
-┌──────────────
+┌──────────────┐
 │   Resident   │
 └──────┬───────┘
        │
@@ -74,12 +74,12 @@ The high-level authentication flow is:
        │
        │ Secure Communication
        ▼
-┌──────────────┐
-│  UIDAI CIDR  │
-│              │
+┌───────────────┐
+│  UIDAI CIDR   │
+│               │
 │ Authentication│
-│ Processing   │
-└──────┬───────┘
+│ Processing    │
+└──────┬────────┘
        │
        │ Authentication Response
        ▼
@@ -104,6 +104,38 @@ The high-level authentication flow is:
 ┌──────────────┐
 │   Resident   │
 └──────────────┘
+```
+
+```text
+===================================================================================
+                               AADHAAR AUTHENTICATION CYCLE
+===================================================================================
+
+  [RESIDENT]        [SUB-AUA]          [AUA/KUA]           [ASA]        [UIDAI CIDR]
+      │                 │                  │                 │               │
+      │──(1) Factor────►│                  │                 │               │
+      │   (Biometrics/  │                  │                 │               │
+      │    OTP/Demo)    │──(2) Req XML────►│                 │               │
+      │                 │   (HTTPS POST/   │                 │               │
+      │                 │   Signed Payload)│──(3) Protocol──►│               │
+      │                 │                  │   (AUA Routing) │──(4) VPN─────►│
+      │                 │                  │                 │   (Leased     │
+      │                 │                  │                 │    Line)      │
+      │                 │                  │                 │               │
+      │                 │                  │                 │          [PROCESSING]
+      │                 │                  │                 │          (Verify &
+      │                 │                  │                 │           Generate
+      │                 │                  │                 │           AuthRes)
+      │                 │                  │                 │               │
+      │                 │                  │                 │◄──(5) Res─────│
+      │                 │                  │◄──(6) Res───────│   (CIDR Res)  │
+      │                 │◄──(7) res_data───│   (AUA Layer)   │               │
+      │                 │   (Encapsulated) │                 │               │
+      │◄──(8) Result────│                  │                 │               │
+      │   (Success/     │                  │                 │               │
+      │    Failure)     │                  │                 │               │
+      ▼                 ▼                  ▼                 ▼               ▼
+===================================================================================
 ```
 
 Whether you are integrating **OTP Authentication**, **Biometric Authentication**, **Demographic Authentication**, **Face Authentication**, **eKYC**, or **Multi-Factor Authentication**, this guide provides a clear, step-by-step explanation of the authentication lifecycle and the role of the Sub-AUA and AUA in the process.
